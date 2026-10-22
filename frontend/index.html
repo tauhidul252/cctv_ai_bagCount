@@ -31,9 +31,20 @@
       </button>
     </nav>
 
-    <div class="status-badge" id="stream-status">
-      <div class="pulsing-dot"></div>
-      <span id="status-text">AI Pipeline Active</span>
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <div class="model-select-wrapper" style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.06); padding: 5px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12);">
+        <span style="font-size: 0.85rem; font-weight: 600; color: #a0aec0;">🧠 AI Model:</span>
+        <select id="ai-model-select" style="background: #1a202c; color: #00ff88; font-weight: 600; font-size: 0.85rem; border: 1px solid #4a5568; border-radius: 6px; padding: 3px 8px; cursor: pointer; outline: none;">
+          <option value="yolo11s.pt" selected>YOLO11 Small (Recommended ⭐ 38 FPS)</option>
+          <option value="yolo11m.pt">YOLO11 Medium (Ultra Accuracy 15 FPS)</option>
+          <option value="yolov8n.pt">YOLOv8 Nano (Lightweight 45 FPS)</option>
+        </select>
+      </div>
+
+      <div class="status-badge" id="stream-status">
+        <div class="pulsing-dot"></div>
+        <span id="status-text">AI Pipeline Active</span>
+      </div>
     </div>
   </header>
 

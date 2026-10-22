@@ -10,7 +10,7 @@ class BagDetectorTracker:
     """
 
     def __init__(self,
-                 model_path: str = "yolov8n.pt",
+                 model_path: str = "yolo11s.pt",
                  conf_threshold: float = 0.35,
                  iou_threshold: float = 0.5,
                  target_classes: Optional[List[int]] = None):
@@ -38,12 +38,14 @@ class BagDetectorTracker:
         print(f"[AI Detector] Model loaded successfully.")
 
     def update_model(self, new_model_path: str):
-        if os.path.exists(new_model_path):
+        try:
             self.model_path = new_model_path
             self.model = YOLO(new_model_path)
-            print(f"[AI Detector] Switched to new model: {new_model_path}")
+            print(f"[AI Detector] Switched to model: {new_model_path} on {self.device}")
             return True
-        return False
+        except Exception as e:
+            print(f"[AI Detector] Failed to switch to model {new_model_path}: {e}")
+            return False
 
     def track(self, frame) -> List[Dict[str, Any]]:
         """

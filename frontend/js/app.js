@@ -52,6 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initReports();
   initModal();
   initStreamRecovery();
+  initModelSelector();
 });
 
 // Helper for local YYYY-MM-DD
@@ -925,4 +926,39 @@ function showToast(msg) {
     toast.style.transition = 'opacity 0.4s ease';
     setTimeout(() => toast.remove(), 400);
   }, 2500);
+}
+
+async function initModelSelector() {
+  const modelSelect = document.getElementById('ai-model-select');
+  if (!modelSelect) return;
+
+  try {
+    const res = await fetch('/api/models');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.current_model) {
+        modelSelect.value = data.current_model;
+      }
+    }
+  } catch (e) {}
+
+  modelSelect.addEventListener('change', async () => {
+    const chosen = modelSelect.value;
+    showToast(`⏳ লোড হচ্ছে AI মডেল: ${chosen}...`);
+    try {
+      const res = await fetch('/api/models/select', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model_name: chosen })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(`✅ ${data.message || 'AI মডেল সফলভাবে পরিবর্তন হয়েছে'}`);
+      } else {
+        showToast(`❌ মডেল পরিবর্তন ব্যর্থ: ${data.detail || 'Error'}`);
+      }
+    } catch (err) {
+      showToast('❌ মডেল রিকোয়েস্টে সমস্যা হয়েছে');
+    }
+  });
 }

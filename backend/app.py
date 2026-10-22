@@ -60,7 +60,7 @@ def broadcast_event(event_data: dict):
             pass
 
 # Initialize AI & Stream Manager
-detector = BagDetectorTracker(model_path="yolov8n.pt", conf_threshold=0.30)
+detector = BagDetectorTracker(model_path="yolo11s.pt", conf_threshold=0.30)
 counter = DirectionalBagCounter()
 stream_manager = StreamManager(
     source="demo",
@@ -164,6 +164,46 @@ def reset_counter(req: Optional[ResetRequest] = Body(None)):
 def update_line(req: LineCoordsRequest):
     stream_manager.set_line_coordinates(req.x1, req.y1, req.x2, req.y2)
     return {"message": "Line coordinates saved", "coords": [req.x1, req.y1, req.x2, req.y2]}
+
+class ModelSelectRequest(BaseModel):
+    model_name: str
+
+@app.get("/api/models")
+def get_models():
+    current = getattr(stream_manager.detector, "model_path", "yolo11s.pt")
+    return {
+        "current_model": current,
+        "available_models": [
+            {
+                "id": "yolo11s.pt",
+                "name": "YOLO11 Small (রেকমেন্ডেড - দ্রুত ও নিখুঁত)",
+                "speed": "38 FPS (Real-time)",
+                "accuracy": "উচ্চ (High Accuracy)",
+                "recommended": True
+            },
+            {
+                "id": "yolo11m.pt",
+                "name": "YOLO11 Medium (সর্বোচ্চ নিখুঁত)",
+                "speed": "15.4 FPS",
+                "accuracy": "সর্বোচ্চ (Maximum Precision)",
+                "recommended": False
+            },
+            {
+                "id": "yolov8n.pt",
+                "name": "YOLOv8 Nano (হালকা মডেল)",
+                "speed": "45 FPS",
+                "accuracy": "মাঝারি (Standard)",
+                "recommended": False
+            }
+        ]
+    }
+
+@app.post("/api/models/select")
+def select_model(req: ModelSelectRequest):
+    success = stream_manager.detector.update_model(req.model_name)
+    if success:
+        return {"success": True, "message": f"সফলভাবে {req.model_name} মডেলে পরিবর্তন করা হয়েছে", "current_model": req.model_name}
+    raise HTTPException(status_code=400, detail="মডেল লোড করতে ব্যর্থ হয়েছে")
 
 @app.post("/api/upload-video")
 async def upload_video(file: UploadFile = File(...)):
