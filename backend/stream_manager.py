@@ -687,7 +687,7 @@ class StreamManager:
                 sack_color = (0, 255, 120) if scount == 1 else (0, 215, 255) # Gold for 2x stacked!
                 cv2.rectangle(frame, (sx1, sy1), (sx2, sy2), sack_color, 3)
 
-                badge = f"BASTA: {scount}x ({'2 STACKED' if scount == 2 else 'HEAD-LOAD'})"
+                badge = "BASTA: 1x (মাথার ওপর)"
                 (tw, th), _ = cv2.getTextSize(badge, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 2)
                 cv2.rectangle(frame, (sx1, sy1 - 24), (sx1 + tw + 10, sy1), sack_color, -1)
                 cv2.putText(frame, badge, (sx1 + 5, sy1 - 6),

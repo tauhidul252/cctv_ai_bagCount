@@ -185,33 +185,16 @@ class BagDetectorTracker:
                 max_area = area
                 best_cnt = cnt
 
-        # Check white/jute woven sacks if colored sack not found
-        if max_area < 700:
-            m_alt = cv2.bitwise_or(m_white, m_jute)
-            m_alt_clean = cv2.morphologyEx(m_alt, cv2.MORPH_OPEN, kernel)
-            cnts_alt, _ = cv2.findContours(m_alt_clean, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            for cnt in cnts_alt:
-                area = cv2.contourArea(cnt)
-                bx, by, bw, bh = cv2.boundingRect(cnt)
-                if area > max_area and by < crop.shape[0] * 0.70 and bw >= 32 and bh >= 25:
-                    max_area = area
-                    best_cnt = cnt
-
-        if best_cnt is None or max_area < 700:
+        # Real sack on worker's head must have at least 1200px of vibrant sack fabric
+        if best_cnt is None or max_area < 1200:
             return 0, None, 0.0, "No Bag"
 
         bx, by, bw, bh = cv2.boundingRect(best_cnt)
         sack_box = [hleft + bx, htop + by, hleft + bx + bw, htop + by + bh]
 
-        # Single sack vs 2 Stacked Sacks analysis:
-        # Stacked sacks have large vertical height (bh >= 85px or area > 3500 with tall aspect ratio)
-        aspect = bh / max(1, bw)
-        if (bh >= 85 and max_area > 3500) or max_area > 5000:
-            sack_count = 2
-            label = "2x Stacked Sacks (২টি বস্তা)"
-        else:
-            sack_count = 1
-            label = "1x Sack (১টি বস্তা)"
+        # In this warehouse operation, each worker carries strictly 1 sack on head
+        sack_count = 1
+        label = "1x বস্তা (Sack on Head)"
 
         conf = min(0.99, max_area / 2500.0)
         return sack_count, sack_box, round(conf, 2), label

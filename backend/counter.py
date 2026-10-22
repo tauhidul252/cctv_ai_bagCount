@@ -23,11 +23,13 @@ class DirectionalBagCounter:
                  line_start: Tuple[int, int] = (470, 340),
                  line_end: Tuple[int, int] = (260, 340),
                  in_direction: str = "down", # or "up", "left", "right", or based on normal
-                 debounce_seconds: float = 2.0):
+                 debounce_seconds: float = 2.0,
+                 count_out: bool = False):
         self.line_start = line_start
         self.line_end = line_end
         self.in_direction = in_direction
         self.debounce_seconds = debounce_seconds
+        self.count_out = count_out
 
         # State tracking: track_id -> dict(history=[(x, y, timestamp)], counted=direction, last_side=val)
         self.tracks: Dict[int, dict] = {}
@@ -103,33 +105,32 @@ class DirectionalBagCounter:
         if track_data["counted"] is None and (prev_side * side < 0):
             # Check intersection
             if line_intersection(prev_pos, current_pos, self.line_start, self.line_end):
-                # Check how many sacks were carried
-                votes = track_data.get("sack_votes", [])
-                
-                # Strict check: must have active sack detection near crossing
-                if sack_count == 0 and len(votes) < 2:
+                # STRICT CHECK: Must actively carry a sack at crossing time!
+                if sack_count == 0:
                     track_data["counted"] = "SKIPPED_EMPTY"
                     return None
 
-                if votes:
-                    effective_sacks = max(set(votes), key=votes.count)
-                else:
-                    effective_sacks = sack_count
+                # Each carrying worker carries strictly 1 sack on head
+                effective_sacks = 1
 
-                # If no sack detected on this person, SKIP counting (empty-handed person)
-                if effective_sacks <= 0:
-                    track_data["counted"] = "SKIPPED_EMPTY"
-                    return None
+                # Robust trajectory vector (from entry/approach position to current crossing position)
+                # Avoids 1-frame jitter misclassifying IN as OUT
+                start_pos = track_data["history"][0]
+                tx = current_pos[0] - start_pos[0]
+                ty = current_pos[1] - start_pos[1]
 
-                # Compute line normal & movement direction
                 lx = self.line_end[0] - self.line_start[0]
                 ly = self.line_end[1] - self.line_start[1]
-                tx = current_pos[0] - prev_pos[0]
-                ty = current_pos[1] - prev_pos[1]
 
                 # Clockwise normal: (-ly, lx)
                 dot = tx * (-ly) + ty * lx
                 direction = "IN" if dot > 0 else "OUT"
+
+                # Workers returning outside are empty-handed.
+                # In warehouse unloading, sacks only enter (IN). Completely ignore OUT direction.
+                if direction == "OUT" and not self.count_out:
+                    track_data["counted"] = "SKIPPED_OUT"
+                    return None
 
                 track_data["counted"] = direction
                 if direction == "IN":
@@ -137,7 +138,7 @@ class DirectionalBagCounter:
                 else:
                     self.total_out += effective_sacks
 
-                actual_sack_box = track_data.get("last_sack_box") or sack_bbox
+                actual_sack_box = sack_bbox or track_data.get("last_sack_box")
                 event = {
                     "direction": direction,
                     "count": effective_sacks,
@@ -147,7 +148,7 @@ class DirectionalBagCounter:
                     "centroid": [int(cx), int(cy)],
                     "confidence": float(confidence),
                     "timestamp": now,
-                    "notes": sack_label or f"{effective_sacks}x বস্তা (মাথার ওপর)"
+                    "notes": "1x বস্তা (Sack on Head)"
                 }
                 self.recent_events.append(event)
                 if len(self.recent_events) > 50:
