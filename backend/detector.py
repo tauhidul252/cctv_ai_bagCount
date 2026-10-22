@@ -10,40 +10,60 @@ class SackTracker:
 
     def update(self, sack_boxes, frame_idx):
         import numpy as np
-        assigned = set()
         active = []
-        for tid, tdata in list(self.tracks.items()):
-            tcx, tcy = tdata['centroid']
-            best_d = 999
-            best_idx = -1
-            for idx, sbox in enumerate(sack_boxes):
-                if idx in assigned: continue
-                scx = (sbox[0] + sbox[2]) / 2.0
-                scy = (sbox[1] + sbox[3]) / 2.0
-                d = np.hypot(tcx - scx, tcy - scy)
-                if d < 75 and d < best_d:
-                    best_d = d
-                    best_idx = idx
-            if best_idx >= 0:
-                assigned.add(best_idx)
-                sbox = sack_boxes[best_idx]
-                scx = (sbox[0] + sbox[2]) / 2.0
-                scy = (sbox[1] + sbox[3]) / 2.0
-                tdata['centroid'] = (scx, scy)
-                tdata['last_seen'] = frame_idx
-                tdata['box'] = sbox
-                active.append((tid, sbox))
-            else:
-                if frame_idx - tdata['last_seen'] > 10:
-                    del self.tracks[tid]
-
-        for idx, sbox in enumerate(sack_boxes):
-            if idx not in assigned:
+        if not self.tracks:
+            for sbox in sack_boxes:
                 scx = (sbox[0] + sbox[2]) / 2.0
                 scy = (sbox[1] + sbox[3]) / 2.0
                 self.tracks[self.next_id] = {'centroid': (scx, scy), 'last_seen': frame_idx, 'box': sbox}
                 active.append((self.next_id, sbox))
                 self.next_id += 1
+            return active
+
+        track_ids = list(self.tracks.keys())
+        distances = []
+        for tid in track_ids:
+            tcx, tcy = self.tracks[tid]['centroid']
+            for s_idx, sbox in enumerate(sack_boxes):
+                scx = (sbox[0] + sbox[2]) / 2.0
+                scy = (sbox[1] + sbox[3]) / 2.0
+                d = np.hypot(tcx - scx, tcy - scy)
+                distances.append((d, tid, s_idx))
+
+        # Sort by distance for global optimal assignment (prevents track-stealing on side-by-side sacks)
+        distances.sort(key=lambda x: x[0])
+        matched_tracks = set()
+        matched_sacks = set()
+
+        for d, tid, s_idx in distances:
+            if d > 75:
+                break
+            if tid in matched_tracks or s_idx in matched_sacks:
+                continue
+            matched_tracks.add(tid)
+            matched_sacks.add(s_idx)
+            sbox = sack_boxes[s_idx]
+            scx = (sbox[0] + sbox[2]) / 2.0
+            scy = (sbox[1] + sbox[3]) / 2.0
+            self.tracks[tid]['centroid'] = (scx, scy)
+            self.tracks[tid]['last_seen'] = frame_idx
+            self.tracks[tid]['box'] = sbox
+            active.append((tid, sbox))
+
+        # Delete old lost tracks
+        for tid in list(self.tracks.keys()):
+            if tid not in matched_tracks and (frame_idx - self.tracks[tid]['last_seen']) > 12:
+                del self.tracks[tid]
+
+        # Register new detections
+        for s_idx, sbox in enumerate(sack_boxes):
+            if s_idx not in matched_sacks:
+                scx = (sbox[0] + sbox[2]) / 2.0
+                scy = (sbox[1] + sbox[3]) / 2.0
+                self.tracks[self.next_id] = {'centroid': (scx, scy), 'last_seen': frame_idx, 'box': sbox}
+                active.append((self.next_id, sbox))
+                self.next_id += 1
+
         return active
 
 class BagDetectorTracker:
@@ -106,12 +126,14 @@ class BagDetectorTracker:
         sacks = []
         for cnt in cnts:
             area = cv2.contourArea(cnt)
-            if area >= 1100:
+            if area >= 950:
                 bx, by, bw, bh = cv2.boundingRect(cnt)
-                # Walkway steps corridor (ignore far-right stacked bags pile)
-                if 140 <= bx <= 620 and 40 <= by <= 750:
-                    if area > 5500:
-                        # Two workers carrying sacks in tandem: split
+                # STRICT HEAD/SHOULDER LEVEL ONLY:
+                # Sacks carried on worker heads across tripwire corridor are in 140 <= by <= 330.
+                # Wooden awning above (y < 140) and feet/legs/sandals/floor below (y > 330) are 100% EXCLUDED!
+                if 130 <= bx <= 640 and 140 <= by <= 330 and bh >= 35:
+                    # Side-by-side sacks (bw >= 105) or tandem sacks (area >= 4200): split into two distinct sacks
+                    if bw >= 105 or area >= 4200:
                         sacks.append([bx, by, bx + bw // 2, by + bh])
                         sacks.append([bx + bw // 2, by, bx + bw, by + bh])
                     else:
