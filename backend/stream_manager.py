@@ -565,6 +565,8 @@ class StreamManager:
 
     def _record_event(self, event: Dict[str, Any], frame):
         """Save snapshot and write event to DB."""
+        if self.source == "demo":
+            return
         ts_str = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:19]
         filename = f"event_{event['direction']}_id{event['track_id']}_{ts_str}.jpg"
         filepath = os.path.join(SNAPSHOTS_DIR, filename)
