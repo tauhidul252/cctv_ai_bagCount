@@ -20,8 +20,8 @@ class DirectionalBagCounter:
     """
 
     def __init__(self,
-                 line_start: Tuple[int, int] = (480, 80),
-                 line_end: Tuple[int, int] = (480, 750),
+                 line_start: Tuple[int, int] = (470, 340),
+                 line_end: Tuple[int, int] = (260, 340),
                  in_direction: str = "down", # or "up", "left", "right", or based on normal
                  debounce_seconds: float = 2.0):
         self.line_start = line_start
@@ -105,14 +105,19 @@ class DirectionalBagCounter:
             if line_intersection(prev_pos, current_pos, self.line_start, self.line_end):
                 # Check how many sacks were carried
                 votes = track_data.get("sack_votes", [])
+                
+                # Strict check: must have active sack detection near crossing
+                if sack_count == 0 and len(votes) < 2:
+                    track_data["counted"] = "SKIPPED_EMPTY"
+                    return None
+
                 if votes:
-                    # Majority vote among positive detections
                     effective_sacks = max(set(votes), key=votes.count)
                 else:
                     effective_sacks = sack_count
 
                 # If no sack detected on this person, SKIP counting (empty-handed person)
-                if effective_sacks == 0:
+                if effective_sacks <= 0:
                     track_data["counted"] = "SKIPPED_EMPTY"
                     return None
 
@@ -132,16 +137,17 @@ class DirectionalBagCounter:
                 else:
                     self.total_out += effective_sacks
 
+                actual_sack_box = track_data.get("last_sack_box") or sack_bbox
                 event = {
                     "direction": direction,
                     "count": effective_sacks,
                     "track_id": track_id,
                     "bbox": [int(v) for v in bbox],
-                    "sack_bbox": track_data.get("last_sack_box") or [int(v) for v in bbox],
+                    "sack_bbox": [int(v) for v in actual_sack_box] if actual_sack_box else [int(v) for v in bbox],
                     "centroid": [int(cx), int(cy)],
                     "confidence": float(confidence),
                     "timestamp": now,
-                    "notes": sack_label or f"{effective_sacks}x বস্তা (Sack on Head)"
+                    "notes": sack_label or f"{effective_sacks}x বস্তা (মাথার ওপর)"
                 }
                 self.recent_events.append(event)
                 if len(self.recent_events) > 50:

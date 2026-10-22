@@ -157,14 +157,14 @@ class BagDetectorTracker:
 
         hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
 
-        # 1. Yellow rice sack (standard woven polypropylene sacks in BD grain markets)
-        m_yellow = cv2.inRange(hsv, np.array([15, 50, 60]), np.array([38, 255, 255]))
+        # 1. Yellow rice sack (standard high-vibrancy woven polypropylene sacks in BD grain markets)
+        m_yellow = cv2.inRange(hsv, np.array([16, 85, 90]), np.array([35, 255, 255]))
         # 2. Orange / red sacks (flour, feed, lentils)
-        m_orange = cv2.inRange(hsv, np.array([0, 65, 60]), np.array([15, 255, 255]))
-        # 3. White / cream woven poly/jute sacks
-        m_white = cv2.inRange(hsv, np.array([0, 0, 140]), np.array([180, 45, 255]))
+        m_orange = cv2.inRange(hsv, np.array([5, 105, 90]), np.array([15, 255, 255]))
+        # 3. White / cream woven poly sacks (bright, low saturation)
+        m_white = cv2.inRange(hsv, np.array([0, 0, 195]), np.array([180, 35, 255]))
         # 4. Brown / jute / burlap sacks
-        m_jute = cv2.inRange(hsv, np.array([10, 40, 40]), np.array([25, 160, 140]))
+        m_jute = cv2.inRange(hsv, np.array([10, 50, 60]), np.array([25, 150, 140]))
 
         m_colored = cv2.bitwise_or(m_yellow, m_orange)
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
@@ -178,8 +178,8 @@ class BagDetectorTracker:
         for cnt in cnts:
             area = cv2.contourArea(cnt)
             bx, by, bw, bh = cv2.boundingRect(cnt)
-            # Alignment check: sack on head must sit in upper 75% of head/shoulder ROI
-            if by < crop.shape[0] * 0.72 and area > max_area:
+            # Alignment check: sack on head must sit in upper 75% of head/shoulder ROI, with reasonable width/height
+            if by < crop.shape[0] * 0.72 and area > max_area and bw >= 28 and bh >= 20:
                 max_area = area
                 best_cnt = cnt
 
@@ -191,7 +191,7 @@ class BagDetectorTracker:
             for cnt in cnts_alt:
                 area = cv2.contourArea(cnt)
                 bx, by, bw, bh = cv2.boundingRect(cnt)
-                if area > max_area and by < crop.shape[0] * 0.70 and bw > crop.shape[1] * 0.45:
+                if area > max_area and by < crop.shape[0] * 0.70 and bw >= 32 and bh >= 25:
                     max_area = area
                     best_cnt = cnt
 

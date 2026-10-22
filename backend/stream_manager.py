@@ -151,7 +151,7 @@ class StreamManager:
         self.demo_time_offset = 0.0
         self.current_time = 0.0
 
-        # 2. Reset database records if requested
+        # 2. Reset database records and snapshot files if requested
         if clear_database:
             db = SessionLocal()
             try:
@@ -166,6 +166,21 @@ class StreamManager:
                 db.rollback()
             finally:
                 db.close()
+
+            # Clean snapshot images from disk
+            try:
+                for fname in os.listdir(SNAPSHOTS_DIR):
+                    fpath = os.path.join(SNAPSHOTS_DIR, fname)
+                    if os.path.isfile(fpath) and fname.endswith(".jpg"):
+                        os.remove(fpath)
+                crops_dir = os.path.join(SNAPSHOTS_DIR, "crops")
+                if os.path.exists(crops_dir):
+                    for fname in os.listdir(crops_dir):
+                        fpath = os.path.join(crops_dir, fname)
+                        if os.path.isfile(fpath) and fname.endswith(".jpg"):
+                            os.remove(fpath)
+            except Exception as ce:
+                print(f"[StreamManager] Error cleaning snapshot files: {ce}")
 
         # 3. Broadcast reset to connected web clients
         if self.on_event_callback:
@@ -410,9 +425,9 @@ class StreamManager:
         start_time = time.time()
         last_reconnect_time = time.time()
 
-        # Default tripwire line: across the walking passage / conveyor
-        if self.counter.line_start in [(100, 300), (300, 450)]:
-            self.counter.set_line(480, 80, 480, 750)
+        # Default tripwire line: across the warehouse entrance threshold
+        if self.counter.line_start in [(100, 300), (300, 450), (480, 80)]:
+            self.counter.set_line(470, 340, 260, 340)
 
         while self.is_running:
             frame = None
@@ -578,10 +593,27 @@ class StreamManager:
         count = event.get("count", 1)
         color = (0, 255, 120) if event["direction"] == "IN" else (0, 100, 255)
         cv2.rectangle(snap, (x1, y1), (x2, y2), color, 3)
-        badge_text = f"{event['direction']} +{count} BASTA"
+        badge_text = f"BASTA ({event['direction']}) +{count}"
         cv2.putText(snap, badge_text, (x1, max(25, y1 - 10)),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.75, color, 2)
         cv2.imwrite(filepath, snap)
+
+        # Save dedicated high-resolution crop of the sack (head-load dataset)
+        try:
+            crops_dir = os.path.join(SNAPSHOTS_DIR, "crops")
+            os.makedirs(crops_dir, exist_ok=True)
+            pad_x = int((x2 - x1) * 0.15)
+            pad_y = int((y2 - y1) * 0.15)
+            cy1 = max(0, y1 - pad_y)
+            cy2 = min(frame.shape[0], y2 + pad_y)
+            cx1 = max(0, x1 - pad_x)
+            cx2 = min(frame.shape[1], x2 + pad_x)
+            sack_crop = frame[cy1:cy2, cx1:cx2]
+            if sack_crop.size > 0:
+                crop_name = f"crop_sack_{event['direction']}_id{event['track_id']}_{ts_str}.jpg"
+                cv2.imwrite(os.path.join(crops_dir, crop_name), sack_crop)
+        except Exception as ce:
+            print(f"[StreamManager] Crop save error: {ce}")
 
         # Save to DB
         db = SessionLocal()
@@ -639,15 +671,13 @@ class StreamManager:
         # Direction indicator text / arrow
         mid_x = (p1[0] + p2[0]) // 2
         mid_y = (p1[1] + p2[1]) // 2
-        cv2.putText(frame, "TRIPWIRE (COUNT LINE)", (mid_x - 110, mid_y - 12),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-        cv2.putText(frame, "IN (DOWN) v", (mid_x - 50, mid_y + 25),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 120), 2)
+        cv2.putText(frame, "TRIPWIRE (BASTA COUNT LINE)", (mid_x - 130, mid_y - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 255), 2)
+        cv2.putText(frame, "IN (WAREHOUSE ENTRY) ^", (mid_x - 100, mid_y + 22),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 120), 2)
 
-        # 2. Draw Tracked Bounding Boxes & Head-Load Bags
+        # 2. Draw ONLY Detected Head-Load Sacks (Do not draw boxes on empty-handed people)
         for obj in tracked_objects:
-            x1, y1, x2, y2 = obj["bbox"]
-            tid = obj["track_id"]
             scount = obj.get("sack_count", 0)
             sbox = obj.get("sack_box")
 
@@ -657,25 +687,15 @@ class StreamManager:
                 sack_color = (0, 255, 120) if scount == 1 else (0, 215, 255) # Gold for 2x stacked!
                 cv2.rectangle(frame, (sx1, sy1), (sx2, sy2), sack_color, 3)
 
-                badge = f"BASTA: {scount}x ({'STACKED' if scount == 2 else 'HEAD-LOAD'})"
+                badge = f"BASTA: {scount}x ({'2 STACKED' if scount == 2 else 'HEAD-LOAD'})"
                 (tw, th), _ = cv2.getTextSize(badge, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 2)
                 cv2.rectangle(frame, (sx1, sy1 - 24), (sx1 + tw + 10, sy1), sack_color, -1)
                 cv2.putText(frame, badge, (sx1 + 5, sy1 - 6),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 2, cv2.LINE_AA)
 
-                # Subtle worker outline
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (60, 110, 80), 1)
                 cx = (sx1 + sx2) // 2
                 cy = (sy1 + sy2) // 2
                 cv2.circle(frame, (cx, cy), 5, sack_color, -1)
-            else:
-                # Empty-handed person: subtle gray box, explicitly labeled as skipped
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (70, 75, 85), 1)
-                label = f"Person #{tid} (No Bag - Skipped)"
-                (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.42, 1)
-                cv2.rectangle(frame, (x1, y1 - 18), (x1 + tw + 6, y1), (35, 40, 48), -1)
-                cv2.putText(frame, label, (x1 + 3, y1 - 5),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.42, (170, 175, 185), 1, cv2.LINE_AA)
 
         # 3. HUD Display (Top Bar with live counters)
         h, w = frame.shape[:2]
