@@ -215,9 +215,19 @@ function initTripwire() {
     }
   });
 
+  // Flip line direction button
+  const btnFlip = document.getElementById('btn-flip-direction');
+  if (btnFlip) {
+    btnFlip.addEventListener('click', () => {
+      tripwire.flipDirection();
+      showToast('দিক পরিবর্তন হয়েছে! তীরটি বিপরীত দিকে ঘুরে গেছে।');
+    });
+  }
+
   // Reset line button
   document.getElementById('btn-reset-line').addEventListener('click', () => {
     tripwire.setLine(520, 230, 220, 230);
+    showToast('লাইনটি প্রবেশদ্বারের আদর্শ অবস্থানে রিসেট করা হয়েছে।');
   });
 }
 

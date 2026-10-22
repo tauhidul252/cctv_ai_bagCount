@@ -27,6 +27,10 @@ class TripwireCanvas {
   }
 
   resizeCanvas() {
+    if (this.videoImg && this.videoImg.naturalWidth && this.videoImg.naturalHeight) {
+      this.videoWidth = this.videoImg.naturalWidth;
+      this.videoHeight = this.videoImg.naturalHeight;
+    }
     const rect = this.videoImg.getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0) {
       this.canvas.width = rect.width;
@@ -35,15 +39,23 @@ class TripwireCanvas {
     }
   }
 
-  // Convert video coordinates (1280x720) to canvas screen coordinates
+  // Convert video coordinates to canvas screen coordinates
   toScreen(pt) {
+    if (this.videoImg && this.videoImg.naturalWidth && this.videoImg.naturalHeight) {
+      this.videoWidth = this.videoImg.naturalWidth;
+      this.videoHeight = this.videoImg.naturalHeight;
+    }
     const sx = this.canvas.width / this.videoWidth;
     const sy = this.canvas.height / this.videoHeight;
     return { x: pt.x * sx, y: pt.y * sy };
   }
 
-  // Convert canvas screen coordinates to video coordinates (1280x720)
+  // Convert canvas screen coordinates to video coordinates
   toVideo(screenPt) {
+    if (this.videoImg && this.videoImg.naturalWidth && this.videoImg.naturalHeight) {
+      this.videoWidth = this.videoImg.naturalWidth;
+      this.videoHeight = this.videoImg.naturalHeight;
+    }
     const sx = this.videoWidth / this.canvas.width;
     const sy = this.videoHeight / this.canvas.height;
     return {
@@ -55,6 +67,13 @@ class TripwireCanvas {
   setLine(x1, y1, x2, y2) {
     this.p1 = { x: x1, y: y1 };
     this.p2 = { x: x2, y: y2 };
+    this.render();
+  }
+
+  flipDirection() {
+    const tmp = { ...this.p1 };
+    this.p1 = { ...this.p2 };
+    this.p2 = tmp;
     this.render();
   }
 
@@ -176,6 +195,13 @@ class TripwireCanvas {
     ctx.lineTo(mx + nx - 10 * Math.cos(angle - Math.PI / 6), my + ny - 10 * Math.sin(angle - Math.PI / 6));
     ctx.lineTo(mx + nx - 10 * Math.cos(angle + Math.PI / 6), my + ny - 10 * Math.sin(angle + Math.PI / 6));
     ctx.fill();
+
+    // Arrow direction badge
+    ctx.font = 'bold 12px Outfit, sans-serif';
+    ctx.fillStyle = '#10b981';
+    const lblX = mx + nx + (nx >= 0 ? 10 : -70);
+    const lblY = my + ny + (ny >= 0 ? 14 : -6);
+    ctx.fillText('IN (প্রবেশ)', lblX, lblY);
 
     // Endpoints Handles
     // Start Handle (Green)
