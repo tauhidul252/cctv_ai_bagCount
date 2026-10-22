@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BastaCount AI — CCTV Industrial Bag & Sack In/Out Counter</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📦</text></svg>">
+</head>
+<body>
+
+  <!-- Top Navigation -->
+  <header>
+    <div class="logo-area">
+      <div class="logo-icon">📦</div>
+      <div class="logo-text">
+        <h1>BastaCount AI (বস্তা কাউন্টার)</h1>
+        <p>CCTV & NVR Automated Directional Bag Tracking System</p>
+      </div>
+    </div>
+
+    <nav class="nav-tabs">
+      <button class="nav-tab active" data-tab="live-tab">
+        <span>📹</span> Live Feed & Calibration
+      </button>
+      <button class="nav-tab" data-tab="nvr-tab">
+        <span>🔌</span> NVR & Video Inputs
+      </button>
+      <button class="nav-tab" data-tab="reports-tab">
+        <span>📊</span> Historical Reports & Audit
+      </button>
+    </nav>
+
+    <div class="status-badge" id="stream-status">
+      <div class="pulsing-dot"></div>
+      <span id="status-text">AI Pipeline Active</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- Real-time Summary Cards -->
+    <section class="metrics-grid">
+      <div class="metric-card in">
+        <div class="metric-title">
+          <span>Bags In (ভেতরে ঢোকা)</span>
+          <span>⬇️</span>
+        </div>
+        <div class="metric-value" id="val-in">0</div>
+        <div class="metric-sub">Total loaded / entered count</div>
+      </div>
+
+      <div class="metric-card out">
+        <div class="metric-title">
+          <span>Bags Out (বাইরে যাওয়া)</span>
+          <span>⬆️</span>
+        </div>
+        <div class="metric-value" id="val-out">0</div>
+        <div class="metric-sub">Total unloaded / exited count</div>
+      </div>
+
+      <div class="metric-card net">
+        <div class="metric-title">
+          <span>Net Balance (নেট হিসাব)</span>
+          <span>⚖️</span>
+        </div>
+        <div class="metric-value" id="val-net">0</div>
+        <div class="metric-sub">Current session differential</div>
+      </div>
+
+      <div class="metric-card fps">
+        <div class="metric-title">
+          <span>Processing Speed</span>
+          <span>⚡</span>
+        </div>
+        <div class="metric-value" id="val-fps">0.0 <span style="font-size: 1rem; color: var(--text-secondary);">FPS</span></div>
+        <div class="metric-sub" id="source-indicator">Source: Demo Simulation</div>
+      </div>
+    </section>
+
+    <!-- Tab 1: Live Stream & Line Calibration -->
+    <section id="live-tab" class="tab-content active">
+      <!-- Camera Quick Switcher Bar -->
+      <div class="camera-quick-bar">
+        <div class="quick-input-group">
+          <span style="font-size: 1.1rem;">📹</span>
+          <select id="quick-preset" class="form-control" style="max-width: 180px;">
+            <option value="custom">Custom RTSP URL</option>
+            <option value="hikvision">Hikvision Camera</option>
+            <option value="dahua">Dahua Camera</option>
+            <option value="cp_plus">CP Plus Camera</option>
+            <option value="uniview">Uniview Camera</option>
+            <option value="demo">Demo Simulation</option>
+          </select>
+          <input type="text" id="quick-camera-url" class="form-control" placeholder="rtsp://admin:password@192.168.1.xxx:554/Streaming/Channels/101" />
+          <button class="btn btn-primary" id="btn-quick-connect">
+            <span>⚡</span> Connect Camera
+          </button>
+          <button class="btn btn-secondary" id="btn-switch-demo" title="Switch to simulation test feed">
+            <span>🎮</span> Test Demo Feed
+          </button>
+        </div>
+        <div id="quick-conn-status" class="conn-status-tag demo">
+          <span class="pulsing-dot" style="width: 7px; height: 7px;"></span>
+          <span id="quick-conn-label">Active: Demo Simulation</span>
+        </div>
+      </div>
+
+      <div class="stream-layout">
+        <!-- Video Stream Player -->
+        <div class="video-container" id="video-wrapper">
+          <img id="video-feed" src="/api/stream/feed" alt="Live CCTV AI Feed" />
+          <canvas id="line-canvas"></canvas>
+          <div class="canvas-hint">
+            💡 Drag green/red endpoints to calibrate Tripwire Line
+          </div>
+
+          <!-- YouTube-style Video Playback Control Bar -->
+          <div class="video-player-controls" id="video-controls">
+            <!-- Scrubber Track & Red Dot Indicator -->
+            <div class="scrubber-container" id="scrubber-container">
+              <div class="scrubber-track" id="scrubber-track">
+                <div class="scrubber-progress" id="scrubber-progress"></div>
+                <div class="scrubber-thumb" id="scrubber-thumb"></div>
+              </div>
+              <div class="scrubber-tooltip" id="scrubber-tooltip">0:00</div>
+            </div>
+
+            <!-- Playback Buttons & Timeline Row -->
+            <div class="controls-row">
+              <div class="controls-left">
+                <button class="player-btn" id="btn-play-pause" title="Play / Pause (Space)">
+                  <span id="play-pause-icon">❚❚</span>
+                </button>
+                <button class="player-btn" id="btn-skip-back" title="Rewind 5s (←)">
+                  <span>⏪ 5s</span>
+                </button>
+                <button class="player-btn" id="btn-skip-forward" title="Forward 5s (→)">
+                  <span>5s ⏩</span>
+                </button>
+                <div class="time-display">
+                  <span id="current-time-text">0:00</span>
+                  <span class="time-divider">/</span>
+                  <span id="duration-text">5:00</span>
+                </div>
+              </div>
+
+              <div class="controls-right">
+                <div class="speed-control">
+                  <span style="font-size: 0.78rem; color: var(--text-muted); margin-right: 4px;">Speed:</span>
+                  <select id="playback-speed-select" class="speed-select">
+                    <option value="0.5">0.5x</option>
+                    <option value="1.0" selected>1.0x</option>
+                    <option value="1.5">1.5x</option>
+                    <option value="2.0">2.0x</option>
+                  </select>
+                </div>
+                <button class="player-btn" id="btn-fullscreen" title="Fullscreen (F)">
+                  <span>⛶</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Real-time Event Feed -->
+        <div class="side-panel">
+          <div class="panel-header">
+            <h3>Recent Bag Crossings</h3>
+            <span style="font-size: 0.8rem; color: var(--text-muted);" id="live-event-count">Live Feed</span>
+          </div>
+          <div class="event-list" id="event-feed-list">
+            <!-- Dynamic events inserted here -->
+            <div style="text-align: center; color: var(--text-muted); padding: 2rem;">
+              Waiting for bag crossing events...
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Controls & Calibration Toolbar -->
+      <div class="stream-controls">
+        <div class="btn-group">
+          <button class="btn btn-primary" id="btn-save-line">
+            <span>💾</span> Save Tripwire Line
+          </button>
+          <button class="btn btn-secondary" id="btn-reset-line">
+            <span>🔄</span> Reset Line to Center
+          </button>
+        </div>
+
+        <div class="btn-group">
+          <button class="btn btn-secondary" id="btn-reset-counters">
+            <span>0️⃣</span> Reset Counters
+          </button>
+          <button class="btn btn-danger" id="btn-stop-stream">
+            <span>⏹️</span> Stop Stream
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 2: NVR & Video Input Configuration -->
+    <section id="nvr-tab" class="tab-content">
+      <div class="card-grid">
+        <!-- NVR / CCTV Direct Integration -->
+        <div class="config-card">
+          <h2>Direct NVR / DVR Network Integration</h2>
+          <p>Connect directly to your CCTV recorder via RTSP protocol for live streams or historical playback.</p>
+
+          <form id="nvr-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label>NVR Brand / Protocol</label>
+                <select class="form-control" id="nvr-brand">
+                  <option value="hikvision">Hikvision / Ezviz</option>
+                  <option value="dahua">Dahua / Imou</option>
+                  <option value="uniview">Uniview (UNV)</option>
+                  <option value="cp_plus">CP Plus</option>
+                  <option value="generic">Generic RTSP / ONVIF</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Mode</label>
+                <select class="form-control" id="nvr-mode">
+                  <option value="live">🔴 Live Real-Time Stream</option>
+                  <option value="playback">⏮️ Date & Time Playback</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>NVR IP Address / Host</label>
+                <input type="text" class="form-control" id="nvr-host" placeholder="192.168.1.100" required />
+              </div>
+              <div class="form-group">
+                <label>RTSP Port</label>
+                <input type="number" class="form-control" id="nvr-port" value="554" />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Username</label>
+                <input type="text" class="form-control" id="nvr-user" value="admin" />
+              </div>
+              <div class="form-group">
+                <label>Password</label>
+                <input type="password" class="form-control" id="nvr-pass" placeholder="••••••••" />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Camera Channel No.</label>
+                <input type="number" class="form-control" id="nvr-channel" value="1" min="1" max="128" />
+              </div>
+              <div class="form-group">
+                <label>Stream Quality</label>
+                <select class="form-control" id="nvr-stream-type">
+                  <option value="main">Main Stream (High Resolution)</option>
+                  <option value="sub">Sub Stream (Faster / Bandwidth friendly)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Historical Playback Date/Time picker -->
+            <div id="playback-fields" style="display: none; background: rgba(0,0,0,0.25); padding: 1rem; border-radius: var(--radius-sm); margin-bottom: 1rem;">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Playback Start Time</label>
+                  <input type="datetime-local" class="form-control" id="playback-start" />
+                </div>
+                <div class="form-group">
+                  <label>Playback End Time</label>
+                  <input type="datetime-local" class="form-control" id="playback-end" />
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Generated RTSP URL</label>
+              <input type="text" class="form-control" id="nvr-generated-url" readonly style="font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--accent-cyan);" />
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width: 100%;">
+              <span>🚀</span> Connect NVR Stream & Start Counting
+            </button>
+          </form>
+        </div>
+
+        <!-- Video File Upload & Local Source -->
+        <div class="config-card">
+          <h2>Recorded Video Analysis</h2>
+          <p>Upload previously saved CCTV footage (.mp4, .avi, .mkv) for date-specific bag counting verification.</p>
+
+          <div class="upload-dropzone" id="upload-zone">
+            <div class="upload-icon">📁</div>
+            <h3>Drag & Drop Video Footage Here</h3>
+            <p style="color: var(--text-muted); margin: 0.5rem 0;">Supports MP4, AVI, MOV, MKV up to 2GB</p>
+            <input type="file" id="video-file-input" accept="video/*" style="display: none;" />
+            <button type="button" class="btn btn-secondary" onclick="document.getElementById('video-file-input').click()">
+              Browse Video Files
+            </button>
+            <div id="upload-progress" style="display: none; margin-top: 1rem; color: var(--accent-cyan); font-weight: 600;">
+              Uploading & Starting AI Pipeline...
+            </div>
+          </div>
+
+          <div style="margin-top: 2rem;">
+            <h3 style="font-size: 1.05rem; margin-bottom: 0.5rem;">Alternative Direct Stream URL</h3>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">Have a direct RTSP/HTTP camera URL or want to use default demo?</p>
+            <div class="form-row">
+              <input type="text" class="form-control" id="direct-stream-url" placeholder="rtsp://... or demo" value="demo" />
+              <button class="btn btn-secondary" id="btn-start-direct">
+                Connect URL
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 3: Historical Reports & Audit Logs -->
+    <section id="reports-tab" class="tab-content">
+      <div class="config-card" style="margin-bottom: 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+          <div>
+            <h2>Historical Bag In / Out Audit</h2>
+            <p style="margin-bottom: 0;">Filter counts by specific dates, view verification snapshots, and export to CSV.</p>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+            <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+              <input type="date" class="form-control" id="filter-start-date" style="width: auto;" />
+              <span style="color: var(--text-muted);">to</span>
+              <input type="date" class="form-control" id="filter-end-date" style="width: auto;" />
+              <button class="btn btn-primary" id="btn-filter-reports">Filter</button>
+              <a href="/api/reports/export" class="btn btn-secondary" download>
+                <span>📥</span> Export CSV
+              </a>
+              <button type="button" class="btn btn-danger" id="btn-clear-reports" title="Reset all records and counts">
+                <span>🗑️</span> Reset All Data
+              </button>
+            </div>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <span style="font-size: 0.78rem; color: var(--text-muted);">Quick Range:</span>
+              <button type="button" class="btn btn-secondary" id="btn-date-today" style="padding: 3px 10px; font-size: 0.78rem;">📅 Today (আজকে)</button>
+              <button type="button" class="btn btn-secondary" id="btn-date-yesterday" style="padding: 3px 10px; font-size: 0.78rem;">Yesterday</button>
+              <button type="button" class="btn btn-secondary" id="btn-date-7days" style="padding: 3px 10px; font-size: 0.78rem;">Last 7 Days</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="data-table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Timestamp (Time)</th>
+              <th>Direction</th>
+              <th>Track ID</th>
+              <th>Confidence</th>
+              <th>Verification Snapshot</th>
+              <th>Audit Notes</th>
+            </tr>
+          </thead>
+          <tbody id="reports-table-body">
+            <tr>
+              <td colspan="7" style="text-align: center; color: var(--text-muted);">Loading historical records...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- Snapshot Modal for Auditing -->
+  <div class="modal-overlay" id="snapshot-modal">
+    <div class="modal-content">
+      <button class="modal-close" id="modal-close-btn">&times;</button>
+      <h3 id="modal-title" style="color: #fff;">Bag Crossing Snapshot Verification</h3>
+      <p id="modal-meta" style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 4px;"></p>
+      <img id="modal-img" class="modal-img" src="" alt="Verification snapshot" />
+    </div>
+  </div>
+
+  <script src="/js/canvas_draw.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,87 @@
+# ==========================================
+# CCTV AI Bag Counter - Git Ignore Rules
+# ==========================================
+
+# Python virtual environment
+venv/
+env/
+.venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Byte-compiled / optimized / cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local SQLite databases & session logs
+*.db
+*.sqlite
+*.sqlite3
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+
+# Uploaded test videos and input media (keep directory structure with .gitkeep)
+data/uploads/*
+!data/uploads/.gitkeep
+
+# Generated event snapshots / capture frames
+data/snapshots/*
+!data/snapshots/.gitkeep
+
+# Temporary frame inspection dumps / debug scratch directories
+scratch_frames/
+scratch/
+temp/
+tmp/
+
+# YOLO & PyTorch model weights (models download automatically on first run)
+*.pt
+*.pth
+*.onnx
+*.engine
+weights/
+data/models/*
+!data/models/.gitkeep
+
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+
+# Environment & log files
+.env
+.env.local
+*.log

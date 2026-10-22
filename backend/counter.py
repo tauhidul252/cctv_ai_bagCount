@@ -1,0 +1,159 @@
+import time
+import math
+from typing import Dict, List, Tuple, Optional
+
+def line_intersection(p1: Tuple[float, float], p2: Tuple[float, float],
+                      p3: Tuple[float, float], p4: Tuple[float, float]) -> bool:
+    """Check if line segment p1-p2 intersects with line segment p3-p4."""
+    def ccw(a, b, c):
+        return (c[1] - a[1]) * (b[0] - a[0]) > (b[1] - a[1]) * (c[0] - a[0])
+    return (ccw(p1, p3, p4) != ccw(p2, p3, p4)) and (ccw(p1, p2, p3) != ccw(p1, p2, p4))
+
+def cross_product(p1: Tuple[float, float], p2: Tuple[float, float], p: Tuple[float, float]) -> float:
+    """Signed cross product of vector (p2 - p1) with vector (p - p1)."""
+    return (p2[0] - p1[0]) * (p[1] - p1[1]) - (p2[1] - p1[1]) * (p[0] - p1[0])
+
+class DirectionalBagCounter:
+    """
+    Robust directional counter for bags/sacks passing across a configurable tripwire line.
+    Supports IN and OUT detection with debounce and trajectory validation.
+    """
+
+    def __init__(self,
+                 line_start: Tuple[int, int] = (480, 80),
+                 line_end: Tuple[int, int] = (480, 750),
+                 in_direction: str = "down", # or "up", "left", "right", or based on normal
+                 debounce_seconds: float = 2.0):
+        self.line_start = line_start
+        self.line_end = line_end
+        self.in_direction = in_direction
+        self.debounce_seconds = debounce_seconds
+
+        # State tracking: track_id -> dict(history=[(x, y, timestamp)], counted=direction, last_side=val)
+        self.tracks: Dict[int, dict] = {}
+        self.total_in = 0
+        self.total_out = 0
+        self.recent_events: List[dict] = []
+
+    def set_line(self, x1: int, y1: int, x2: int, y2: int, in_direction: str = "down"):
+        self.line_start = (x1, y1)
+        self.line_end = (x2, y2)
+        self.in_direction = in_direction
+
+    def reset_counts(self):
+        self.total_in = 0
+        self.total_out = 0
+        self.tracks.clear()
+        self.recent_events.clear()
+
+    def update(self,
+               track_id: int,
+               bbox: Tuple[float, float, float, float],
+               confidence: float = 1.0,
+               sack_count: int = 1,
+               sack_bbox: Optional[List[int]] = None,
+               sack_label: str = "") -> Optional[dict]:
+        """
+        bbox: (x1, y1, x2, y2)
+        sack_count: 0 (no sack - do not count), 1 (single sack), 2 (stacked sacks)
+        Returns event dict if a valid bag crossing occurred.
+        """
+        now = time.time()
+        # For tracking crossing, use sack center if available, otherwise upper-torso/head center
+        if sack_bbox is not None and sack_count > 0:
+            cx = (sack_bbox[0] + sack_bbox[2]) / 2.0
+            cy = (sack_bbox[1] + sack_bbox[3]) / 2.0
+        else:
+            cx = (bbox[0] + bbox[2]) / 2.0
+            cy = bbox[1] + (bbox[3] - bbox[1]) * 0.25 # head/shoulder level
+
+        current_pos = (cx, cy)
+        side = cross_product(self.line_start, self.line_end, current_pos)
+
+        if track_id not in self.tracks:
+            self.tracks[track_id] = {
+                "history": [(cx, cy, now)],
+                "counted": None,
+                "initial_side": side,
+                "last_side": side,
+                "last_seen": now,
+                "sack_votes": [sack_count] if sack_count > 0 else [],
+                "last_sack_box": sack_bbox
+            }
+            return None
+
+        track_data = self.tracks[track_id]
+        track_data["last_seen"] = now
+        track_data["history"].append((cx, cy, now))
+        if len(track_data["history"]) > 30:
+            track_data["history"].pop(0)
+
+        if sack_count > 0:
+            track_data["sack_votes"].append(sack_count)
+            if len(track_data["sack_votes"]) > 20:
+                track_data["sack_votes"].pop(0)
+            if sack_bbox is not None:
+                track_data["last_sack_box"] = sack_bbox
+
+        prev_pos = (track_data["history"][-2][0], track_data["history"][-2][1])
+        prev_side = track_data["last_side"]
+        track_data["last_side"] = side
+
+        # Check if crossed the line
+        if track_data["counted"] is None and (prev_side * side < 0):
+            # Check intersection
+            if line_intersection(prev_pos, current_pos, self.line_start, self.line_end):
+                # Check how many sacks were carried
+                votes = track_data.get("sack_votes", [])
+                if votes:
+                    # Majority vote among positive detections
+                    effective_sacks = max(set(votes), key=votes.count)
+                else:
+                    effective_sacks = sack_count
+
+                # If no sack detected on this person, SKIP counting (empty-handed person)
+                if effective_sacks == 0:
+                    track_data["counted"] = "SKIPPED_EMPTY"
+                    return None
+
+                # Compute line normal & movement direction
+                lx = self.line_end[0] - self.line_start[0]
+                ly = self.line_end[1] - self.line_start[1]
+                tx = current_pos[0] - prev_pos[0]
+                ty = current_pos[1] - prev_pos[1]
+
+                # Clockwise normal: (-ly, lx)
+                dot = tx * (-ly) + ty * lx
+                direction = "IN" if dot > 0 else "OUT"
+
+                track_data["counted"] = direction
+                if direction == "IN":
+                    self.total_in += effective_sacks
+                else:
+                    self.total_out += effective_sacks
+
+                event = {
+                    "direction": direction,
+                    "count": effective_sacks,
+                    "track_id": track_id,
+                    "bbox": [int(v) for v in bbox],
+                    "sack_bbox": track_data.get("last_sack_box") or [int(v) for v in bbox],
+                    "centroid": [int(cx), int(cy)],
+                    "confidence": float(confidence),
+                    "timestamp": now,
+                    "notes": sack_label or f"{effective_sacks}x বস্তা (Sack on Head)"
+                }
+                self.recent_events.append(event)
+                if len(self.recent_events) > 50:
+                    self.recent_events.pop(0)
+
+                return event
+
+        return None
+
+    def clean_old_tracks(self, max_age_seconds: float = 10.0):
+        """Clean up lost tracks."""
+        now = time.time()
+        expired = [tid for tid, data in self.tracks.items() if (now - data["last_seen"]) > max_age_seconds]
+        for tid in expired:
+            del self.tracks[tid]
