@@ -217,7 +217,7 @@ function initTripwire() {
 
   // Reset line button
   document.getElementById('btn-reset-line').addEventListener('click', () => {
-    tripwire.setLine(300, 450, 980, 450);
+    tripwire.setLine(520, 230, 220, 230);
   });
 }
 

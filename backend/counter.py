@@ -20,8 +20,8 @@ class DirectionalBagCounter:
     """
 
     def __init__(self,
-                 line_start: Tuple[int, int] = (470, 340),
-                 line_end: Tuple[int, int] = (260, 340),
+                 line_start: Tuple[int, int] = (520, 230),
+                 line_end: Tuple[int, int] = (220, 230),
                  in_direction: str = "down", # or "up", "left", "right", or based on normal
                  debounce_seconds: float = 2.0,
                  count_out: bool = False):

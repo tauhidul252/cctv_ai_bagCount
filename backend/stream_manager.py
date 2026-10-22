@@ -426,8 +426,8 @@ class StreamManager:
         last_reconnect_time = time.time()
 
         # Default tripwire line: across the warehouse entrance threshold
-        if self.counter.line_start in [(100, 300), (300, 450), (480, 80)]:
-            self.counter.set_line(470, 340, 260, 340)
+        if self.counter.line_start in [(100, 300), (300, 450), (480, 80), (470, 340)]:
+            self.counter.set_line(520, 230, 220, 230)
 
         while self.is_running:
             frame = None
